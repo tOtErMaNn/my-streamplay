@@ -243,6 +243,7 @@ class Hub:
                 "message": status.get("message"),
                 "canPlayback": cls.sinks is not Backend.sinks,
                 "hasLibrary": cls.has_library,
+                "hasFolders": cls.has_folders,
                 "builtin": profile.builtin,
             })
         return out
@@ -454,6 +455,9 @@ class Hub:
 
         if spec.get("playlistId"):
             return await self.backend(source).playlist_tracks(str(spec["playlistId"]))
+
+        if spec.get("folderId"):
+            return await self.backend(source).folder_tracks(str(spec["folderId"]))
 
         if spec.get("artistId"):
             backend = self.backend(source)

@@ -124,10 +124,13 @@ QtObject {
         send("player.setRepeat", { mode: order[(at + 1) % order.length] });
     }
 
-    function enqueue(spec, mode, play) {
+    function enqueue(spec, mode, play, shuffle) {
         const params = Object.assign({}, spec, { mode: mode || "append" });
         if (play) {
             params.play = true;
+        }
+        if (shuffle) {
+            params.shuffle = true;
         }
         send("queue.add", params);
     }

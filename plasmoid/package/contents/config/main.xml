@@ -55,7 +55,7 @@
       <default>alphabetical</default>
     </entry>
     <entry name="sectionOrder" type="StringList">
-      <default>albums,artists,genres,playlists</default>
+      <default>albums,artists,genres,playlists,folders</default>
     </entry>
     <entry name="showAlbums" type="Bool">
       <default>true</default>
@@ -68,6 +68,9 @@
     </entry>
     <entry name="showPlaylists" type="Bool">
       <default>true</default>
+    </entry>
+    <entry name="showFolders" type="Bool">
+      <default>false</default>
     </entry>
   </group>
 </kcfg>

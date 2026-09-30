@@ -48,6 +48,7 @@ class FakeEmby(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length)) if length else {}
         self.requests.append((method, url.path, body))
+        query = parse_qs(url.query)
 
         if not url.path.startswith("/emby/") or self.headers.get("Authorization"):
             return self._reply(404)
@@ -61,6 +62,24 @@ class FakeEmby(BaseHTTPRequestHandler):
             return self._reply(401)
         if method == "POST":
             return self._reply(204)
+        if path == "/Items":
+            parent = (query.get("ParentId") or [""])[0]
+            listing = {
+                "": [{"Id": "lib1", "Name": "Music", "CollectionType": "music"}],
+                "lib1": [{"Id": "fv1", "Name": "Folders", "Type": "Folder"}],
+                "fv1": [{"Id": "f1", "Name": "Albums", "Type": "Folder",
+                         "ChildCount": 2},
+                        {"Id": "f2", "Name": "Singles", "Type": "Folder",
+                         "ChildCount": 1},
+                        {"Id": "t1", "Name": "One", "Type": "Audio",
+                         "AlbumId": "al1", "RunTimeTicks": 1_200_000_000}],
+                "f1": [{"Id": "t1", "Name": "One", "Type": "Audio",
+                        "AlbumId": "al1", "RunTimeTicks": 1_200_000_000},
+                       {"Id": "t2", "Name": "Two", "Type": "Audio",
+                        "AlbumId": "al1", "RunTimeTicks": 600_000_000}],
+            }
+            if parent in listing:
+                return self._reply(200, {"Items": listing[parent]})
         if path == "/Artists/AlbumArtists":
             return self._reply(200, {"Items": [{"Id": "ar1", "Name": "Neon"}]})
         self._reply(200, {"Items": [{"Id": "t1", "Name": "One", "AlbumId": "al1",
@@ -99,6 +118,17 @@ async def main() -> None:
         tracks = await emby.album_tracks("al1")
         check("tracks", [(t.id, t.duration, t.backend) for t in tracks]
               == [("t1", 120.0, "emby")])
+
+        check("emby can browse folders", emby.has_folders)
+        subfolders, direct = await emby.folder_items()
+        check("the folder view hides behind the music library",
+              [f["id"] for f in subfolders] == ["f1", "f2"]
+              and [t.id for t in direct] == ["t1"])
+        subfolders, direct = await emby.folder_items("f1")
+        check("a folder lists its tracks", subfolders == []
+              and [t.id for t in direct] == ["t1", "t2"])
+        check("folder tracks are gathered recursively",
+              [t.id for t in await emby.folder_tracks("f1")] == ["t1", "t2"])
 
         stream = urlsplit(emby.stream_url(tracks[0]))
         check("stream goes through /emby with the token",

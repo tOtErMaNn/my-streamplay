@@ -55,6 +55,7 @@ Item {
                     source: rowItem.kind === "artist" ? "view-media-artist"
                           : rowItem.kind === "genre" ? "view-media-genre"
                           : rowItem.kind === "playlist" ? "view-media-playlist"
+                          : rowItem.kind === "folder" ? "folder"
                           : rowItem.kind === "track" ? "audio-x-generic"
                                                      : "media-optical-audio"
                 }
@@ -63,6 +64,7 @@ Item {
                     id: cover
                     anchors.fill: parent
                     source: rowItem.kind === "genre" || rowItem.kind === "track"
+                            || rowItem.kind === "folder"
                             ? "" : root.client.itemCover(rowItem.item, 64)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
@@ -111,6 +113,9 @@ Item {
                             return item.albumCount
                                 ? i18np("%1 album", "%1 albums", item.albumCount) : "";
                         case "playlist":
+                            return item.trackCount
+                                ? i18np("%1 track", "%1 tracks", item.trackCount) : "";
+                        case "folder":
                             return item.trackCount
                                 ? i18np("%1 track", "%1 tracks", item.trackCount) : "";
                         }

@@ -22,7 +22,9 @@ KCM.SimpleKCM {
     property bool cfg_showArtists: true
     property bool cfg_showGenres: true
     property bool cfg_showPlaylists: true
-    property var cfg_sectionOrder: ["albums", "artists", "genres", "playlists"]
+    property bool cfg_showFolders: false
+    property var cfg_sectionOrder: ["albums", "artists", "genres", "playlists",
+                                    "folders"]
     property bool cfg_showPlayingTab: true
     property bool cfg_showQueueTab: true
     property bool cfg_showLibraryTab: true
@@ -245,6 +247,7 @@ KCM.SimpleKCM {
                 artists:   { label: i18n("Artists"),   flag: "cfg_showArtists" },
                 genres:    { label: i18n("Genres"),    flag: "cfg_showGenres" },
                 playlists: { label: i18n("Playlists"), flag: "cfg_showPlaylists" },
+                folders:   { label: i18n("Folders"),   flag: "cfg_showFolders" },
             })
             warning: i18n("At least one section has to stay switched on; "
                         + "Albums will be used otherwise.")
