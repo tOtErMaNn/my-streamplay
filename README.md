@@ -2,7 +2,8 @@
 
 [![tests](https://img.shields.io/github/actions/workflow/status/leissa/streamplay/tests.yml?branch=master&style=flat-square&logo=github&label=tests)](https://github.com/leissa/streamplay/actions/workflows/tests.yml)
 
-# A FORK OF THE ORIGINAL WORK OF Roland Leißa customized for my needs. ATTENTION: AI-SLOP!
+# A FORK OF THE ORIGINAL WORK OF Roland Leißa,
+# customized for my needs. ATTENTION: AI-SLOP!
 
 A Plasma 6 widget for self-hosted music libraries. It connects to
 **Subsonic**-compatible servers, **Jellyfin**, **Emby**, **Plex**, **Kodi**,
