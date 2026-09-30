@@ -81,8 +81,8 @@ class JellyfinBackend(Backend):
         self.device_id = f"{CLIENT_NAME}-{self.source}-{secrets.token_hex(4)}"
         self.token = ""
         self.user_id = ""
-        self._library_id = ""
-        self._folder_root_id = ""
+        self._library_items: list[dict[str, Any]] = []
+        self._folder_roots: dict[str, str] = {}
 
         self._session = requests.Session()
         self._session.headers["User-Agent"] = f"{CLIENT_NAME}/{__version__}"
@@ -272,31 +272,37 @@ class JellyfinBackend(Backend):
         return [self._track(t) for t in items]
 
 
-    async def _music_library_id(self) -> str:
-        """The library whose folders we browse, looked up once."""
-        if not self._library_id:
-            items = await self._items()
-            for item in items:
-                if (item.get("CollectionType") or "").lower() == "music":
-                    self._library_id = str(item["Id"])
-                    break
-            else:
+    async def _music_libraries(self) -> list[dict[str, Any]]:
+        """The music libraries we can browse the folders of."""
+        if not self._library_items:
+            self._library_items = [
+                item for item in await self._items()
+                if (item.get("CollectionType") or "").lower() == "music"
+            ]
+            if not self._library_items:
                 raise BackendError(f"{self.name}: no music library found")
-        return self._library_id
+        return [
+            {
+                "id": str(item["Id"]),
+                "source": self.source,
+                "name": item.get("Name") or "",
+                "coverId": _primary(item),
+            }
+            for item in self._library_items
+        ]
 
-    async def _folder_root(self) -> str:
+    async def _folder_root(self, library_id: str) -> str:
         """The item whose children are the top-level physical folders.
 
         Emby and Jellyfin hide them under a "Folders" child of the music
         library, which only exists when the library shows the folder view.
         """
-        if not self._folder_root_id:
-            library_id = await self._music_library_id()
+        if library_id not in self._folder_roots:
             items = await self._items(
                 ParentId=library_id, SortBy="SortName", Fields="ChildCount")
             for item in items:
                 if item.get("Name") == "Folders":
-                    self._folder_root_id = str(item["Id"])
+                    self._folder_roots[library_id] = str(item["Id"])
                     break
             else:
                 # Some libraries let the folders sit at the top level.
@@ -305,15 +311,19 @@ class JellyfinBackend(Backend):
                     raise BackendError(
                         f"{self.name}: switch the folder view on in the "
                         "library settings")
-                self._folder_root_id = library_id
-        return self._folder_root_id
+                self._folder_roots[library_id] = library_id
+        return self._folder_roots[library_id]
 
     async def folder_items(
         self, folder_id: str | None = None,
     ) -> tuple[list[dict[str, Any]], list[Track]]:
-        parent = folder_id or await self._folder_root()
+        libraries = await self._music_libraries()
+        if folder_id is None:
+            return libraries, []
+        if folder_id in {lib["id"] for lib in libraries}:
+            folder_id = await self._folder_root(folder_id)
         items = await self._items(
-            ParentId=parent, SortBy="SortName", Fields="ChildCount")
+            ParentId=folder_id, SortBy="SortName", Fields="ChildCount")
         folders, tracks = [], []
         for item in items:
             if item.get("Type") == "Audio":

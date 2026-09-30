@@ -113,7 +113,7 @@ class Backend(abc.ABC):
     async def folder_items(
         self, folder_id: str | None = None,
     ) -> tuple[list[dict[str, Any]], list[Track]]:
-        """Children of a physical folder, or the folder roots when
+        """Children of a physical folder, or the music libraries when
         folder_id is None: subfolders first, the tracks directly
         inside them second."""
         return [], []
