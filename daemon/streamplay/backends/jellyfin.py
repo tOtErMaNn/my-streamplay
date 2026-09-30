@@ -60,6 +60,8 @@ def _primary(item: dict[str, Any]) -> str | None:
 
 class JellyfinBackend(Backend):
     kind = "jellyfin"
+    #: Emby and Jellyfin both expose the physical folders of a music library.
+    has_folders = True
 
     def __init__(self, profile: dict[str, Any]) -> None:
         super().__init__(profile)
@@ -79,6 +81,8 @@ class JellyfinBackend(Backend):
         self.device_id = f"{CLIENT_NAME}-{self.source}-{secrets.token_hex(4)}"
         self.token = ""
         self.user_id = ""
+        self._library_items: list[dict[str, Any]] = []
+        self._folder_roots: dict[str, str] = {}
 
         self._session = requests.Session()
         self._session.headers["User-Agent"] = f"{CLIENT_NAME}/{__version__}"
@@ -265,6 +269,83 @@ class JellyfinBackend(Backend):
     async def playlist_tracks(self, playlist_id: str) -> list[Track]:
         items = await self._items(f"/Playlists/{quote(playlist_id)}/Items",
                                   Fields=TRACK_FIELDS)
+        return [self._track(t) for t in items]
+
+
+    async def _music_libraries(self) -> list[dict[str, Any]]:
+        """The music libraries we can browse the folders of."""
+        if not self._library_items:
+            self._library_items = [
+                item for item in await self._items()
+                if (item.get("CollectionType") or "").lower() == "music"
+            ]
+            if not self._library_items:
+                raise BackendError(f"{self.name}: no music library found")
+        return [
+            {
+                "id": str(item["Id"]),
+                "source": self.source,
+                "name": item.get("Name") or "",
+                "coverId": _primary(item),
+            }
+            for item in self._library_items
+        ]
+
+    async def _folder_root(self, library_id: str) -> str:
+        """The item whose children are the top-level physical folders.
+
+        Emby and Jellyfin hide them under a "Folders" child of the music
+        library, which only exists when the library shows the folder view.
+        """
+        if library_id not in self._folder_roots:
+            items = await self._items(
+                ParentId=library_id, SortBy="SortName", Fields="ChildCount")
+            for item in items:
+                if item.get("Name") == "Folders":
+                    self._folder_roots[library_id] = str(item["Id"])
+                    break
+            else:
+                # Some libraries let the folders sit at the top level.
+                if not [item for item in items
+                        if item.get("Type") in ("Folder", "MusicFolder")]:
+                    raise BackendError(
+                        f"{self.name}: switch the folder view on in the "
+                        "library settings")
+                self._folder_roots[library_id] = library_id
+        return self._folder_roots[library_id]
+
+    async def folder_items(
+        self, folder_id: str | None = None,
+    ) -> tuple[list[dict[str, Any]], list[Track]]:
+        libraries = await self._music_libraries()
+        if folder_id is None:
+            return libraries, []
+        if folder_id in {lib["id"] for lib in libraries}:
+            folder_id = await self._folder_root(folder_id)
+        items = await self._items(
+            ParentId=folder_id, SortBy="SortName", Fields="ChildCount")
+        folders, tracks = [], []
+        for item in items:
+            if item.get("Type") == "Audio":
+                tracks.append(self._track(item))
+            elif item.get("Type") in ("Folder", "MusicFolder"):
+                folders.append({
+                    "id": str(item["Id"]),
+                    "source": self.source,
+                    "name": item.get("Name") or "",
+                    "trackCount": int(item.get("ChildCount") or 0),
+                    "coverId": _primary(item),
+                })
+        return folders, tracks
+
+    async def folder_tracks(
+        self, folder_id: str, recursive: bool = True,
+    ) -> list[Track]:
+        items = await self._items(
+            ParentId=folder_id, IncludeItemTypes="Audio",
+            Recursive="true" if recursive else "false",
+            SortBy="ParentIndexNumber,IndexNumber,SortName",
+            Fields=TRACK_FIELDS)
         return [self._track(t) for t in items]
 
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 from typing import Any, Awaitable, Callable
 from urllib.parse import parse_qs, urlparse
 
@@ -223,6 +224,11 @@ async def _queue_add(hub: Hub, params: dict) -> Any:
     tracks = await hub.tracks_for(params)
     if not tracks:
         return {"added": 0}
+    if params.get("shuffle"):
+        # A fresh queue starts on its first entry, so shuffle the tracks
+        # themselves; the setting follows, so the rest keeps shuffling too.
+        random.shuffle(tracks)
+        await hub.player.set_shuffle(True)
     await hub.player.enqueue(
         tracks,
         mode=str(params.get("mode") or "append"),
@@ -344,6 +350,28 @@ async def _playlist_tracks(hub: Hub, params: dict) -> Any:
     tracks = await backend.playlist_tracks(str(params.get("id") or ""))
     return {"tracks": [t.to_json() for t in tracks]}
 
+
+
+@method("library.folderItems")
+async def _folder_items(hub: Hub, params: dict) -> Any:
+    folder_id = params.get("id")
+    if folder_id:
+        backend = hub.backend(_source(params))
+        folders, tracks = await backend.folder_items(str(folder_id))
+        return {"folders": folders,
+                "tracks": [t.to_json() for t in tracks]}
+    backends = hub.selected(_source(params))
+    results = await asyncio.gather(
+        *(backend.folder_items() for backend in backends),
+        return_exceptions=True)
+    folders, tracks = [], []
+    for backend, result in zip(backends, results):
+        if isinstance(result, Exception):
+            log.info("%s: %s", backend.name, result)
+            continue
+        folders.extend(result[0])
+        tracks.extend(result[1])
+    return {"folders": folders, "tracks": [t.to_json() for t in tracks]}
 
 
 @method("lyrics.get")

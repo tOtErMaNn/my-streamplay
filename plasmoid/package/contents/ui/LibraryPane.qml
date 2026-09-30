@@ -42,6 +42,10 @@ Item {
             playlists: { mode: "playlists", label: i18n("Playlists"),
                          icon: "view-media-playlist",
                          shown: Plasmoid.configuration.showPlaylists },
+            folders: { mode: "folders", label: i18n("Folders"),
+                       icon: "folder",
+                       shown: Plasmoid.configuration.showFolders
+                              && client.libraries.some(s => s.hasFolders) },
         };
 
         const kept = [];
@@ -76,6 +80,9 @@ Item {
     /* True when the current list is made of tracks we can enqueue wholesale. */
     readonly property bool listIsTracks:
         here.mode === "albumTracks" || here.mode === "playlistTracks"
+    /* Folders enqueue by id, so their lists need no track round-trip either. */
+    readonly property bool listIsPlayable:
+        listIsTracks || here.mode === "folderItems"
 
     /* Move off a section that has just been switched off. */
     function ensureSection() {
@@ -187,6 +194,30 @@ Item {
             client.call("library.playlists", _params(),
                         _receive("playlist", "playlists"));
             break;
+        case "folders":
+        case "folderItems":
+            client.call("library.folderItems",
+                        at.mode === "folderItems"
+                            ? { id: at.id, source: at.source }
+                            : _params(),
+                        _latest(function (result, error) {
+                if (error) {
+                    pane.loadError = error;
+                    pane.entries = [];
+                    return;
+                }
+                pane.loadError = "";
+                const built = [];
+                // Tracks directly inside the folder follow the subfolders.
+                for (const folder of (result && result.folders) || []) {
+                    built.push({ kind: "folder", item: folder });
+                }
+                for (const track of (result && result.tracks) || []) {
+                    built.push({ kind: "track", item: track });
+                }
+                pane.entries = built;
+            }));
+            break;
         case "artistAlbums":
             client.call("library.artistAlbums",
                         { id: at.id, source: at.source, sort: albumSort },
@@ -243,9 +274,17 @@ Item {
         case "album":    return { albumId: item.id, source: item.source };
         case "artist":   return { artistId: item.id, source: item.source };
         case "playlist": return { playlistId: item.id, source: item.source };
+        case "folder":   return { folderId: item.id, source: item.source };
         case "track":    return { tracks: [item] };
         }
         return null;
+    }
+
+    /* What Play All, Add All and Shuffle All enqueue for the current list. */
+    function _bulkSpec() {
+        return here.mode === "folderItems"
+            ? { folderId: here.id, source: here.source }
+            : { tracks: entries.map(e => e.item) };
     }
 
     function enqueue(entry, mode) {
@@ -271,6 +310,10 @@ Item {
             break;
         case "playlist":
             push({ mode: "playlistTracks", id: item.id, source: item.source,
+                   title: item.name });
+            break;
+        case "folder":
+            push({ mode: "folderItems", id: item.id, source: item.source,
                    title: item.name });
             break;
         case "track":
@@ -459,10 +502,9 @@ Item {
             PlasmaComponents.ToolButton {
                 icon.name: "media-playback-start"
                 display: PlasmaComponents.AbstractButton.IconOnly
-                visible: pane.listIsTracks && pane.entries.length > 0
+                visible: pane.listIsPlayable && pane.entries.length > 0
                 text: i18n("Play All")
-                onClicked: client.enqueue(
-                    { tracks: pane.entries.map(e => e.item) }, "replace", true)
+                onClicked: client.enqueue(pane._bulkSpec(), "replace", true)
 
                 PlasmaComponents.ToolTip.text: text
                 PlasmaComponents.ToolTip.visible: hovered
@@ -472,10 +514,21 @@ Item {
             PlasmaComponents.ToolButton {
                 icon.name: "list-add"
                 display: PlasmaComponents.AbstractButton.IconOnly
-                visible: pane.listIsTracks && pane.entries.length > 0
+                visible: pane.listIsPlayable && pane.entries.length > 0
                 text: i18n("Add All to Queue")
-                onClicked: client.enqueue(
-                    { tracks: pane.entries.map(e => e.item) }, "append", false)
+                onClicked: client.enqueue(pane._bulkSpec(), "append", false)
+
+                PlasmaComponents.ToolTip.text: text
+                PlasmaComponents.ToolTip.visible: hovered
+                PlasmaComponents.ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
+            PlasmaComponents.ToolButton {
+                icon.name: "media-playlist-shuffle"
+                display: PlasmaComponents.AbstractButton.IconOnly
+                visible: pane.listIsPlayable && pane.entries.length > 0
+                text: i18n("Shuffle All")
+                onClicked: client.enqueue(pane._bulkSpec(), "replace", true, true)
 
                 PlasmaComponents.ToolTip.text: text
                 PlasmaComponents.ToolTip.visible: hovered

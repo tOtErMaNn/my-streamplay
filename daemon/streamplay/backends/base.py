@@ -50,6 +50,8 @@ class Backend(abc.ABC):
     has_library: bool = True
     #: Whether its stream URLs are web streams any output can open, which MPD's ``file://`` are not.
     web_streams: bool = True
+    #: Whether the library can also be browsed by its physical folders.
+    has_folders: bool = False
 
     def __init__(self, profile: dict[str, Any]) -> None:
         self.profile = profile
@@ -105,6 +107,21 @@ class Backend(abc.ABC):
         return []
 
     async def playlist_tracks(self, playlist_id: str) -> list[Track]:
+        return []
+
+
+    async def folder_items(
+        self, folder_id: str | None = None,
+    ) -> tuple[list[dict[str, Any]], list[Track]]:
+        """Children of a physical folder, or the music libraries when
+        folder_id is None: subfolders first, the tracks directly
+        inside them second."""
+        return [], []
+
+    async def folder_tracks(
+        self, folder_id: str, recursive: bool = True,
+    ) -> list[Track]:
+        """Every track under the folder, for Play All and Shuffle."""
         return []
 
 
