@@ -135,7 +135,8 @@ class YouTubeBackend(Backend):
         )
 
 
-    async def search(self, query: str, limit: int = 40) -> dict[str, list]:
+    async def search(self, query: str, limit: int = 40,
+                     library_id: str | None = None) -> dict[str, list]:
         songs, albums, artists = await asyncio.gather(
             self._call("search", query, filter="songs", limit=limit),
             self._call("search", query, filter="albums", limit=limit),

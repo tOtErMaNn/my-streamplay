@@ -62,8 +62,49 @@ class FakeEmby(BaseHTTPRequestHandler):
             return self._reply(401)
         if method == "POST":
             return self._reply(204)
+        t1 = {"Id": "t1", "Name": "One", "Type": "Audio", "AlbumId": "al1",
+              "RunTimeTicks": 1_200_000_000}
+        t2 = {"Id": "t2", "Name": "Two", "Type": "Audio", "AlbumId": "al1",
+              "RunTimeTicks": 600_000_000}
+        t3 = {"Id": "t3", "Name": "Three", "Type": "Audio", "AlbumId": "al2",
+              "RunTimeTicks": 600_000_000}
+        ar1 = {"Id": "ar1", "Name": "Neon"}
+        ar2 = {"Id": "ar2", "Name": "Blip"}
+        al1 = {"Id": "al1", "Name": "Neon Lights", "ProductionYear": 2020}
+        al2 = {"Id": "al2", "Name": "Blip Beeps", "ProductionYear": 2021}
         if path == "/Items":
             parent = (query.get("ParentId") or [""])[0]
+            include = (query.get("IncludeItemTypes") or [""])[0]
+            if include == "MusicAlbum":
+                genre = (query.get("Genres") or [""])[0]
+                term = (query.get("SearchTerm") or [""])[0].lower()
+                if genre:
+                    # genre_albums(): ParentId keeps them inside the library.
+                    found = {("", "Pop"): [al1, al2],
+                             ("lib1", "Pop"): [al1],
+                             ("lib2", "Pop"): [al2],
+                             ("", "Techno"): [al2],
+                             ("lib1", "Techno"): [],
+                             ("lib2", "Techno"): [al2]}
+                    return self._reply(200,
+                                       {"Items": found.get((parent, genre), [])})
+                if term:
+                    found = {("", "n"): [al1], ("lib1", "n"): [al1],
+                             ("lib2", "n"): []}
+                    return self._reply(200,
+                                       {"Items": found.get((parent, term), [])})
+                found = {"": [al1, al2], "lib1": [al1], "lib2": [al2]}
+                return self._reply(200, {"Items": found.get(parent, [])})
+            if include == "Audio":
+                term = (query.get("SearchTerm") or [""])[0].lower()
+                if term:
+                    found = {("", "n"): [t1], ("lib1", "n"): [t1],
+                             ("lib2", "n"): []}
+                    return self._reply(200,
+                                       {"Items": found.get((parent, term), [])})
+                found = {"": [t1, t2, t3], "lib1": [t1, t2], "lib2": [t3],
+                         "al1": [t1], "f1": [t1, t2], "f3": [t3]}
+                return self._reply(200, {"Items": found.get(parent, [])})
             listing = {
                 "": [{"Id": "lib1", "Name": "Music",
                       "CollectionType": "music"},
@@ -76,21 +117,28 @@ class FakeEmby(BaseHTTPRequestHandler):
                          "ChildCount": 2},
                         {"Id": "f2", "Name": "Singles", "Type": "Folder",
                          "ChildCount": 1},
-                        {"Id": "t1", "Name": "One", "Type": "Audio",
-                         "AlbumId": "al1", "RunTimeTicks": 1_200_000_000}],
-                "f1": [{"Id": "t1", "Name": "One", "Type": "Audio",
-                        "AlbumId": "al1", "RunTimeTicks": 1_200_000_000},
-                       {"Id": "t2", "Name": "Two", "Type": "Audio",
-                        "AlbumId": "al1", "RunTimeTicks": 600_000_000}],
-                "f3": [{"Id": "t3", "Name": "Three", "Type": "Audio",
-                        "AlbumId": "al1", "RunTimeTicks": 600_000_000}],
+                        t1],
+                "f1": [t1, t2],
+                "f3": [t3],
             }
-            if parent in listing:
-                return self._reply(200, {"Items": listing[parent]})
+            return self._reply(200, {"Items": listing.get(parent, [])})
         if path == "/Artists/AlbumArtists":
-            return self._reply(200, {"Items": [{"Id": "ar1", "Name": "Neon"}]})
-        self._reply(200, {"Items": [{"Id": "t1", "Name": "One", "AlbumId": "al1",
-                                     "RunTimeTicks": 1_200_000_000}]})
+            parent = (query.get("ParentId") or [""])[0]
+            found = {"": [ar1, ar2], "lib1": [ar1], "lib2": [ar2]}
+            return self._reply(200, {"Items": found.get(parent, [])})
+        if path == "/Artists":
+            parent = (query.get("ParentId") or [""])[0]
+            term = (query.get("SearchTerm") or [""])[0].lower()
+            found = {("", "n"): [ar1], ("lib1", "n"): [ar1],
+                     ("lib2", "n"): []}
+            return self._reply(200, {"Items": found.get((parent, term), [])})
+        if path == "/Genres":
+            parent = (query.get("ParentId") or [""])[0]
+            found = {"": [{"Name": "Pop"}, {"Name": "Techno"}],
+                     "lib1": [{"Name": "Pop"}],
+                     "lib2": [{"Name": "Techno"}]}
+            return self._reply(200, {"Items": found.get(parent, [])})
+        self._reply(200, {"Items": [t1]})
 
     def do_GET(self) -> None:
         self._handle("GET")
@@ -121,7 +169,8 @@ async def main() -> None:
         emby = EmbyBackend(profile)
         await emby.connect()
         check("login yields token and user", (emby.token, emby.user_id) == (TOKEN, USER))
-        check("artists", [a.name for a in await emby.artists()] == ["Neon"])
+        check("artists", [a.name for a in await emby.artists()]
+              == ["Neon", "Blip"])
         tracks = await emby.album_tracks("al1")
         check("tracks", [(t.id, t.duration, t.backend) for t in tracks]
               == [("t1", 120.0, "emby")])
@@ -146,6 +195,25 @@ async def main() -> None:
         check("a library's tracks are gathered recursively",
               [t.id for t in await emby.folder_tracks("lib2")] == ["t3"])
 
+        check("artists can be scoped to a library",
+              [a.name for a in await emby.artists(library_id="lib2")]
+              == ["Blip"])
+        check("albums can be scoped to a library",
+              [a.id for a in await emby.albums()] == ["al1", "al2"]
+              and [a.id for a in await emby.albums(library_id="lib2")]
+              == ["al2"])
+        check("genres can be scoped to a library",
+              await emby.genres() == ["Pop", "Techno"]
+              and await emby.genres(library_id="lib1") == ["Pop"])
+        check("genre albums stay inside the library",
+              [a.id for a in await emby.genre_albums("Pop", library_id="lib1")]
+              == ["al1"])
+        found = await emby.search("n", library_id="lib1")
+        check("search can be scoped to a library",
+              [a.id for a in found["artists"]] == ["ar1"]
+              and [a.id for a in found["albums"]] == ["al1"]
+              and [t.id for t in found["tracks"]] == ["t1"]
+              and (await emby.search("n", library_id="lib2"))["albums"] == [])
         stream = urlsplit(emby.stream_url(tracks[0]))
         check("stream goes through /emby with the token",
               stream.path == "/emby/Audio/t1/stream"

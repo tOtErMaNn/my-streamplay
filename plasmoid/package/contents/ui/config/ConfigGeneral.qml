@@ -25,6 +25,7 @@ KCM.SimpleKCM {
     property bool cfg_showFolders: false
     property var cfg_sectionOrder: ["albums", "artists", "genres", "playlists",
                                     "folders"]
+    property alias cfg_rememberLibraryScope: rememberScope.checked
     property bool cfg_showPlayingTab: true
     property bool cfg_showQueueTab: true
     property bool cfg_showLibraryTab: true
@@ -251,6 +252,12 @@ KCM.SimpleKCM {
             })
             warning: i18n("At least one section has to stay switched on; "
                         + "Albums will be used otherwise.")
+        }
+
+        QQC2.CheckBox {
+            id: rememberScope
+            Kirigami.FormData.label: i18n("Library picker:")
+            text: i18n("Remember the library selection")
         }
     }
 }

@@ -78,27 +78,30 @@ class Backend(abc.ABC):
         if self._on_sinks_changed is not None:
             self._on_sinks_changed()
 
-    async def artists(self) -> list[Artist]:
+    async def artists(self, library_id: str | None = None) -> list[Artist]:
         return []
 
     async def artist_albums(self, artist_id: str) -> list[Album]:
         return []
 
     async def albums(self, sort: str = "alphabetical", offset: int = 0,
-                     limit: int = 100) -> list[Album]:
+                     limit: int = 100,
+                     library_id: str | None = None) -> list[Album]:
         return []
 
     async def album_tracks(self, album_id: str) -> list[Track]:
         return []
 
-    async def search(self, query: str, limit: int = 40) -> dict[str, list]:
+    async def search(self, query: str, limit: int = 40,
+                     library_id: str | None = None) -> dict[str, list]:
         return {"artists": [], "albums": [], "tracks": []}
 
-    async def genres(self) -> list[str]:
+    async def genres(self, library_id: str | None = None) -> list[str]:
         return []
 
     async def genre_albums(self, genre: str, offset: int = 0,
-                           limit: int = 100) -> list[Album]:
+                           limit: int = 100,
+                           library_id: str | None = None) -> list[Album]:
         return []
 
     async def playlists(self) -> list[dict[str, Any]]:

@@ -23,9 +23,43 @@ Item {
 
     /* Which service to browse; empty means all of them at once. */
     property string sourceFilter: ""
+    /* The library picked inside the service, when it splits into several. */
+    property string libraryFilter: ""
+    /* The libraries of the connected services, for the picker. */
+    property var libraryList: []
+    // Guards against a stale reply landing after a newer request.
+    property int _libSeq: 0
 
     /* Bound, not read inline, so changing the setting can trigger a reload. */
     readonly property string albumSort: Plasmoid.configuration.albumSort
+
+    /* What the picker offers: everything, a whole service, or one of its
+       libraries. Entries carry their own source and library ids. */
+    readonly property var scopeEntries: {
+        const multi = client.libraries.length > 1;
+        const entries = [{ source: "", libraryId: "",
+                           name: i18n("All libraries") }];
+        const bySource = {};
+        for (const library of libraryList) {
+            (bySource[library.source] = bySource[library.source] || [])
+                .push(library);
+        }
+        for (const source of client.libraries) {
+            const libraries = bySource[source.id] || [];
+            if (source.hasFolders && libraries.length > 0) {
+                for (const library of libraries) {
+                    entries.push({ source: source.id, libraryId: library.id,
+                                   name: multi
+                                       ? library.name + " · " + source.name
+                                       : library.name });
+                }
+            } else {
+                entries.push({ source: source.id, libraryId: "",
+                               name: source.name });
+            }
+        }
+        return entries;
+    }
 
     /* The top-level sections, in the order and selection the user chose. */
     readonly property var sections: {
@@ -97,8 +131,10 @@ Item {
         if (sourceFilter
             && !client.libraries.some(s => s.id === sourceFilter)) {
             sourceFilter = "";
+            libraryFilter = "";
             stack = [{ mode: here.mode, title: "" }];
         }
+        loadLibraries();
         load();
     }
 
@@ -133,7 +169,60 @@ Item {
         if (sourceFilter) {
             params.source = sourceFilter;
         }
+        if (libraryFilter) {
+            params.libraryId = libraryFilter;
+        }
         return params;
+    }
+
+    /* The libraries of the connected services, for the picker. */
+    function loadLibraries() {
+        if (!client.linked) {
+            libraryList = [];
+            return;
+        }
+        // Only the latest reply may build the picker, as services come and go.
+        const seq = ++_libSeq;
+        client.call("library.libraries", _params(), function (result) {
+            if (seq !== pane._libSeq) {
+                return;
+            }
+            pane.libraryList = (result && result.libraries) || [];
+        });
+    }
+
+    /* Pick a scope; empty ids browse everything at once again. */
+    function setScope(source, libraryId) {
+        if (sourceFilter === source && libraryFilter === libraryId) {
+            return;
+        }
+        sourceFilter = source;
+        libraryFilter = libraryId;
+        if (Plasmoid.configuration.rememberLibraryScope) {
+            Plasmoid.configuration.libraryScope = JSON.stringify(
+                { source: source, libraryId: libraryId });
+        }
+        // Ids are per-service, so anything deeper is now meaningless.
+        replaceRoot({ mode: atRoot ? here.mode : "albums", title: "" });
+    }
+
+    /* Come back to the scope the user picked last time, if any. */
+    function restoreScope() {
+        if (!Plasmoid.configuration.rememberLibraryScope) {
+            return;
+        }
+        const saved = Plasmoid.configuration.libraryScope;
+        if (!saved) {
+            return;
+        }
+        try {
+            const scope = JSON.parse(saved);
+            if (scope && typeof scope.source === "string") {
+                sourceFilter = scope.source;
+                libraryFilter = scope.libraryId || "";
+            }
+        } catch (err) {
+        }
     }
 
     // Only the latest request may settle the pane; a slow earlier one is dropped.
@@ -199,7 +288,9 @@ Item {
             client.call("library.folderItems",
                         at.mode === "folderItems"
                             ? { id: at.id, source: at.source }
-                            : _params(),
+                            : (libraryFilter
+                                   ? { id: libraryFilter, source: sourceFilter }
+                                   : _params()),
                         _latest(function (result, error) {
                 if (error) {
                     pane.loadError = error;
@@ -323,7 +414,9 @@ Item {
     }
 
     Component.onCompleted: {
+        restoreScope();
         ensureSection();
+        loadLibraries();
         load();
     }
 
@@ -340,6 +433,19 @@ Item {
             load();
         }
     }
+
+    onLibraryListChanged: {
+        // A remembered library may have vanished while the pane was away.
+        if (libraryFilter
+            && !libraryList.some(l => l.id === libraryFilter
+                                     && l.source === sourceFilter)) {
+            setScope("", "");
+        }
+    }
+
+    // Keep the picker on the scope that is actually in force.
+    onSourceFilterChanged: sourceBox.syncToFilter()
+    onLibraryFilterChanged: sourceBox.syncToFilter()
 
     Connections {
         target: client
@@ -437,22 +543,18 @@ Item {
             PlasmaComponents.ComboBox {
                 id: sourceBox
                 Layout.maximumWidth: Kirigami.Units.gridUnit * 8
-                visible: client.libraries.length > 1
+                visible: client.libraries.length > 1 || libraryList.length > 0
                 textRole: "name"
-                model: [{ id: "", name: i18n("All libraries") }].concat(
-                           client.libraries)
+                model: pane.scopeEntries
 
-                onActivated: index => {
-                    pane.sourceFilter = model[index].id || "";
-                    // Ids are per-service, so anything deeper is now meaningless.
-                    pane.replaceRoot({ mode: pane.atRoot ? pane.here.mode : "albums",
-                                       title: "" });
-                }
+                onActivated: index => pane.setScope(model[index].source,
+                                                    model[index].libraryId)
 
-                // Follow the filter, since entries shift as services come and go.
+                // Follow the filters, since entries shift as services come and go.
                 function syncToFilter() {
                     for (let i = 0; i < model.length; ++i) {
-                        if ((model[i].id || "") === pane.sourceFilter) {
+                        if ((model[i].source || "") === pane.sourceFilter
+                            && (model[i].libraryId || "") === pane.libraryFilter) {
                             currentIndex = i;
                             return;
                         }

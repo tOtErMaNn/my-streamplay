@@ -72,5 +72,11 @@
     <entry name="showFolders" type="Bool">
       <default>false</default>
     </entry>
+    <entry name="libraryScope" type="String">
+      <default></default>
+    </entry>
+    <entry name="rememberLibraryScope" type="Bool">
+      <default>true</default>
+    </entry>
   </group>
 </kcfg>

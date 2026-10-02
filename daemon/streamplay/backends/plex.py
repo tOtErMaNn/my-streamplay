@@ -192,7 +192,7 @@ class PlexBackend(Backend):
         )
 
 
-    async def artists(self) -> list[Artist]:
+    async def artists(self, library_id: str | None = None) -> list[Artist]:
         sections = await asyncio.gather(*(
             self._metadata(f"/library/sections/{section}/all", type=ARTIST, sort="titleSort")
             for section in self.sections))
@@ -203,7 +203,8 @@ class PlexBackend(Backend):
         return [self._album(a) for a in items if a.get("type") == "album"]
 
     async def albums(self, sort: str = "alphabetical", offset: int = 0,
-                     limit: int = 100) -> list[Album]:
+                     limit: int = 100,
+                     library_id: str | None = None) -> list[Album]:
         order, filters = ALBUM_SORTS.get(sort, ALBUM_SORTS["alphabetical"])
         items = await self._paged(
             {section: {"type": ALBUM, "sort": order, **filters} for section in self.sections},
@@ -214,7 +215,8 @@ class PlexBackend(Backend):
         items = await self._metadata(f"/library/metadata/{quote(album_id)}/children")
         return [self._track(t) for t in items]
 
-    async def search(self, query: str, limit: int = 40) -> dict[str, list]:
+    async def search(self, query: str, limit: int = 40,
+                     library_id: str | None = None) -> dict[str, list]:
         body = await self._get("/hubs/search", query=query, limit=limit)
         found: dict[str, list] = {"artists": [], "albums": [], "tracks": []}
         for hub in body.get("Hub") or []:
@@ -230,7 +232,7 @@ class PlexBackend(Backend):
                     found["tracks"].append(self._track(item))
         return found
 
-    async def genres(self) -> list[str]:
+    async def genres(self, library_id: str | None = None) -> list[str]:
         bodies = await asyncio.gather(*(
             self._get(f"/library/sections/{section}/genre", type=ALBUM)
             for section in self.sections))
@@ -242,7 +244,8 @@ class PlexBackend(Backend):
         return sorted(names, key=str.casefold)
 
     async def genre_albums(self, genre: str, offset: int = 0,
-                           limit: int = 100) -> list[Album]:
+                           limit: int = 100,
+                           library_id: str | None = None) -> list[Album]:
         if not any(genre in ids for ids in self._genre_ids.values()):
             await self.genres()
         params = {section: {"type": ALBUM, "sort": "album.titleSort", "genre": ids[genre]}

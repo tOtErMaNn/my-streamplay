@@ -197,8 +197,9 @@ class JellyfinBackend(Backend):
         )
 
 
-    async def artists(self) -> list[Artist]:
-        items = await self._items("/Artists/AlbumArtists", SortBy="SortName")
+    async def artists(self, library_id: str | None = None) -> list[Artist]:
+        items = await self._items("/Artists/AlbumArtists", SortBy="SortName",
+                                  ParentId=library_id)
         return [self._artist(a) for a in items]
 
     async def artist_albums(self, artist_id: str) -> list[Album]:
@@ -209,12 +210,14 @@ class JellyfinBackend(Backend):
         return [self._album(a) for a in items]
 
     async def albums(self, sort: str = "alphabetical", offset: int = 0,
-                     limit: int = 100) -> list[Album]:
+                     limit: int = 100,
+                     library_id: str | None = None) -> list[Album]:
         sort_by, order, filters = ALBUM_SORTS.get(sort, ALBUM_SORTS["alphabetical"])
         items = await self._items(
             IncludeItemTypes="MusicAlbum", Recursive="true",
             SortBy=sort_by, SortOrder=order, Filters=filters,
-            StartIndex=offset, Limit=min(limit, 500), Fields=ALBUM_FIELDS)
+            StartIndex=offset, Limit=min(limit, 500), Fields=ALBUM_FIELDS,
+            ParentId=library_id)
         return [self._album(a) for a in items]
 
     async def album_tracks(self, album_id: str) -> list[Track]:
@@ -223,13 +226,17 @@ class JellyfinBackend(Backend):
             SortBy="ParentIndexNumber,IndexNumber,SortName", Fields=TRACK_FIELDS)
         return [self._track(t) for t in items]
 
-    async def search(self, query: str, limit: int = 40) -> dict[str, list]:
+    async def search(self, query: str, limit: int = 40,
+                     library_id: str | None = None) -> dict[str, list]:
         artists, albums, tracks = await asyncio.gather(
-            self._items("/Artists", searchTerm=query, Limit=limit),
+            self._items("/Artists", searchTerm=query, Limit=limit,
+                        ParentId=library_id),
             self._items(searchTerm=query, IncludeItemTypes="MusicAlbum",
-                        Recursive="true", Limit=limit, Fields=ALBUM_FIELDS),
+                        Recursive="true", Limit=limit, Fields=ALBUM_FIELDS,
+                        ParentId=library_id),
             self._items(searchTerm=query, IncludeItemTypes="Audio",
-                        Recursive="true", Limit=limit, Fields=TRACK_FIELDS),
+                        Recursive="true", Limit=limit, Fields=TRACK_FIELDS,
+                        ParentId=library_id),
         )
         return {
             "artists": [self._artist(a) for a in artists],
@@ -237,17 +244,18 @@ class JellyfinBackend(Backend):
             "tracks": [self._track(t) for t in tracks],
         }
 
-    async def genres(self) -> list[str]:
+    async def genres(self, library_id: str | None = None) -> list[str]:
         items = await self._items("/Genres", IncludeItemTypes="MusicAlbum",
-                                  SortBy="SortName")
+                                  SortBy="SortName", ParentId=library_id)
         return [g["Name"] for g in items if g.get("Name")]
 
     async def genre_albums(self, genre: str, offset: int = 0,
-                           limit: int = 100) -> list[Album]:
+                           limit: int = 100,
+                           library_id: str | None = None) -> list[Album]:
         items = await self._items(
             IncludeItemTypes="MusicAlbum", Recursive="true", Genres=genre,
             SortBy="SortName", StartIndex=offset, Limit=min(limit, 500),
-            Fields=ALBUM_FIELDS)
+            Fields=ALBUM_FIELDS, ParentId=library_id)
         return [self._album(a) for a in items]
 
     async def playlists(self) -> list[dict[str, Any]]:

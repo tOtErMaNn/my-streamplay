@@ -378,14 +378,15 @@ class MpdBackend(Backend):
                        album_count=count)
                 for name, count in counts.items()]
 
-    async def artists(self) -> list[Artist]:
+    async def artists(self, library_id: str | None = None) -> list[Artist]:
         return self._artists_of(await self._album_list())
 
     async def artist_albums(self, artist_id: str) -> list[Album]:
         return await self._album_list(_eq("AlbumArtist", artist_id))
 
     async def albums(self, sort: str = "alphabetical", offset: int = 0,
-                     limit: int = 100) -> list[Album]:
+                     limit: int = 100,
+                     library_id: str | None = None) -> list[Album]:
         # MPD cannot sort or page a ``list``, and its database is in memory anyway.
         albums = await self._album_list()
         albums.sort(key=lambda a: (a.artist.lower(), a.year or 0, a.name.lower()))
@@ -401,7 +402,8 @@ class MpdBackend(Backend):
         tracks.sort(key=lambda t: (t.disc_no or 0, t.track_no or 0, t.title.lower()))
         return tracks
 
-    async def search(self, query: str, limit: int = 40) -> dict[str, list]:
+    async def search(self, query: str, limit: int = 40,
+                     library_id: str | None = None) -> dict[str, list]:
         """Find artists, albums and tracks whose names contain the query.
 
         Artists and albums are sieved here because ``list`` matches case-sensitively.
@@ -432,13 +434,14 @@ class MpdBackend(Backend):
             "tracks": [self._track(s) for s in _runs(ok(songs), "file")],
         }
 
-    async def genres(self) -> list[str]:
+    async def genres(self, library_id: str | None = None) -> list[str]:
         pairs = await self.call("list", "genre")
         return sorted({value for key, value in pairs
                        if key == "Genre" and value})
 
     async def genre_albums(self, genre: str, offset: int = 0,
-                           limit: int = 100) -> list[Album]:
+                           limit: int = 100,
+                           library_id: str | None = None) -> list[Album]:
         albums = await self._album_list(_eq("Genre", genre))
         for album in albums:
             # Grouping by genre would split an album tagged inconsistently.

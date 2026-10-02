@@ -188,7 +188,7 @@ class LyrionBackend(Backend):
         return (await self.call(*command)).get(key) or []
 
 
-    async def artists(self) -> list[Artist]:
+    async def artists(self, library_id: str | None = None) -> list[Artist]:
         items = await self._loop("artists_loop", "artists", 0, PAGE)
         return [self._artist(a) for a in items]
 
@@ -198,7 +198,8 @@ class LyrionBackend(Backend):
         return [self._album(a) for a in items]
 
     async def albums(self, sort: str = "alphabetical", offset: int = 0,
-                     limit: int = 100) -> list[Album]:
+                     limit: int = 100,
+                     library_id: str | None = None) -> list[Album]:
         items = await self._loop("albums_loop", "albums", offset, min(limit, 500),
                                  f"sort:{ALBUM_SORTS.get(sort, 'album')}", ALBUM_TAGS)
         return [self._album(a) for a in items]
@@ -210,7 +211,8 @@ class LyrionBackend(Backend):
         tracks.sort(key=lambda t: (t.disc_no or 0, t.track_no or 0))
         return tracks
 
-    async def search(self, query: str, limit: int = 40) -> dict[str, list]:
+    async def search(self, query: str, limit: int = 40,
+                     library_id: str | None = None) -> dict[str, list]:
         term = f"search:{query}"
         artists, albums, tracks = await asyncio.gather(
             self._loop("artists_loop", "artists", 0, limit, term),
@@ -223,14 +225,15 @@ class LyrionBackend(Backend):
             "tracks": [self._track(t) for t in tracks],
         }
 
-    async def genres(self) -> list[str]:
+    async def genres(self, library_id: str | None = None) -> list[str]:
         items = await self._loop("genres_loop", "genres", 0, PAGE)
         self._genre_ids = {g["genre"]: str(g["id"]) for g in items
                            if g.get("genre") and g.get("id") is not None}
         return list(self._genre_ids)
 
     async def genre_albums(self, genre: str, offset: int = 0,
-                           limit: int = 100) -> list[Album]:
+                           limit: int = 100,
+                           library_id: str | None = None) -> list[Album]:
         if genre not in self._genre_ids:
             await self.genres()
         genre_id = self._genre_ids.get(genre)

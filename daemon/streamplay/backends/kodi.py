@@ -180,7 +180,7 @@ class KodiBackend(Backend):
         )
 
 
-    async def artists(self) -> list[Artist]:
+    async def artists(self, library_id: str | None = None) -> list[Artist]:
         result = await self.call("AudioLibrary.GetArtists", {
             "properties": ARTIST_PROPERTIES,
             "sort": {"method": "artist", "order": "ascending"},
@@ -197,7 +197,8 @@ class KodiBackend(Backend):
         return [self._album(a) for a in (result or {}).get("albums") or []]
 
     async def albums(self, sort: str = "alphabetical", offset: int = 0,
-                     limit: int = 100) -> list[Album]:
+                     limit: int = 100,
+                     library_id: str | None = None) -> list[Album]:
         method, order = ALBUM_SORTS.get(sort, ALBUM_SORTS["alphabetical"])
         result = await self.call("AudioLibrary.GetAlbums", {
             "properties": ALBUM_PROPERTIES,
@@ -214,7 +215,8 @@ class KodiBackend(Backend):
         })
         return [self._track(s) for s in (result or {}).get("songs") or []]
 
-    async def search(self, query: str, limit: int = 40) -> dict[str, list]:
+    async def search(self, query: str, limit: int = 40,
+                     library_id: str | None = None) -> dict[str, list]:
         limits = {"start": 0, "end": limit}
         artists, albums, songs = await asyncio.gather(
             self.call("AudioLibrary.GetArtists", {
@@ -244,7 +246,7 @@ class KodiBackend(Backend):
             "tracks": [self._track(s) for s in unwrap(songs, "songs")],
         }
 
-    async def genres(self) -> list[str]:
+    async def genres(self, library_id: str | None = None) -> list[str]:
         result = await self.call("AudioLibrary.GetGenres", {
             "sort": {"method": "label", "order": "ascending"},
         })
@@ -252,7 +254,8 @@ class KodiBackend(Backend):
                 if g.get("label")]
 
     async def genre_albums(self, genre: str, offset: int = 0,
-                           limit: int = 100) -> list[Album]:
+                           limit: int = 100,
+                           library_id: str | None = None) -> list[Album]:
         result = await self.call("AudioLibrary.GetAlbums", {
             "properties": ALBUM_PROPERTIES,
             "filter": {"field": "genre", "operator": "is", "value": genre},

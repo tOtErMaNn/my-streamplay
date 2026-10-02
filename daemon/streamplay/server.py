@@ -42,6 +42,13 @@ def _source(params: dict[str, Any]) -> str | None:
     return str(value) if value else None
 
 
+def _library_id(params: dict[str, Any]) -> str | None:
+    """A library only narrows one service, since its id is only
+    unique there, so a library without a source scopes nothing."""
+    value = params.get("libraryId")
+    return str(value) if value and _source(params) else None
+
+
 def _sort_albums(albums: list, sort: str) -> list:
     """Order an album list the way the user asked, since a merged list has no order.
 
@@ -268,7 +275,8 @@ async def _queue_play_index(hub: Hub, params: dict) -> Any:
 
 @method("library.artists")
 async def _artists(hub: Hub, params: dict) -> Any:
-    artists = await hub.gather(_source(params), lambda b: b.artists())
+    artists = await hub.gather(
+        _source(params), lambda b: b.artists(_library_id(params)))
     artists.sort(key=lambda a: a.name.lower())
     return {"artists": [a.to_json() for a in artists]}
 
@@ -288,7 +296,8 @@ async def _albums(hub: Hub, params: dict) -> Any:
     offset = int(params.get("offset") or 0)
     limit = int(params.get("limit") or 100)
     albums = await hub.gather(
-        _source(params), lambda b: b.albums(sort, offset, limit))
+        _source(params),
+        lambda b: b.albums(sort, offset, limit, _library_id(params)))
     return {"albums": [a.to_json() for a in _sort_albums(albums, sort)]}
 
 
@@ -308,7 +317,8 @@ async def _search(hub: Hub, params: dict) -> Any:
 
     backends = hub.selected(_source(params))
     results = await asyncio.gather(
-        *(b.search(query, limit) for b in backends), return_exceptions=True)
+        *(b.search(query, limit, _library_id(params))
+          for b in backends), return_exceptions=True)
 
     merged: dict[str, list] = {"artists": [], "albums": [], "tracks": []}
     for backend, result in zip(backends, results):
@@ -323,7 +333,8 @@ async def _search(hub: Hub, params: dict) -> Any:
 
 @method("library.genres")
 async def _genres(hub: Hub, params: dict) -> Any:
-    names = await hub.gather(_source(params), lambda b: b.genres())
+    names = await hub.gather(
+        _source(params), lambda b: b.genres(_library_id(params)))
     return {"genres": sorted({n for n in names if n}, key=str.lower)}
 
 
@@ -334,7 +345,8 @@ async def _genre_albums(hub: Hub, params: dict) -> Any:
     limit = int(params.get("limit") or 100)
     sort = str(params.get("sort") or "alphabetical")
     albums = await hub.gather(
-        _source(params), lambda b: b.genre_albums(genre, offset, limit))
+        _source(params),
+        lambda b: b.genre_albums(genre, offset, limit, _library_id(params)))
     return {"albums": [a.to_json() for a in _sort_albums(albums, sort)]}
 
 
@@ -350,6 +362,22 @@ async def _playlist_tracks(hub: Hub, params: dict) -> Any:
     tracks = await backend.playlist_tracks(str(params.get("id") or ""))
     return {"tracks": [t.to_json() for t in tracks]}
 
+
+
+@method("library.libraries")
+async def _libraries(hub: Hub, params: dict) -> Any:
+    """Every library of every folder-capable service, for the picker."""
+    backends = [b for b in hub.selected(_source(params)) if b.has_folders]
+    results = await asyncio.gather(
+        *(backend.folder_items() for backend in backends),
+        return_exceptions=True)
+    libraries = []
+    for backend, result in zip(backends, results):
+        if isinstance(result, Exception):
+            log.info("%s: %s", backend.name, result)
+            continue
+        libraries.extend(result[0])
+    return {"libraries": libraries}
 
 
 @method("library.folderItems")

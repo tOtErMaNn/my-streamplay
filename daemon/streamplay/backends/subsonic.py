@@ -163,7 +163,7 @@ class SubsonicBackend(Backend):
         )
 
 
-    async def artists(self) -> list[Artist]:
+    async def artists(self, library_id: str | None = None) -> list[Artist]:
         body = await self._get("getArtists")
         out: list[Artist] = []
         for index in (body.get("artists") or {}).get("index") or []:
@@ -177,7 +177,8 @@ class SubsonicBackend(Backend):
         return [self._album(a) for a in albums]
 
     async def albums(self, sort: str = "alphabetical", offset: int = 0,
-                     limit: int = 100) -> list[Album]:
+                     limit: int = 100,
+                     library_id: str | None = None) -> list[Album]:
         body = await self._get(
             "getAlbumList2",
             type=ALBUM_SORTS.get(sort, "alphabeticalByName"),
@@ -192,7 +193,8 @@ class SubsonicBackend(Backend):
         songs = (body.get("album") or {}).get("song") or []
         return [self._track(s) for s in songs]
 
-    async def search(self, query: str, limit: int = 40) -> dict[str, list]:
+    async def search(self, query: str, limit: int = 40,
+                     library_id: str | None = None) -> dict[str, list]:
         body = await self._get(
             "search3", query=query,
             artistCount=limit, albumCount=limit, songCount=limit,
@@ -204,13 +206,14 @@ class SubsonicBackend(Backend):
             "tracks": [self._track(s) for s in result.get("song") or []],
         }
 
-    async def genres(self) -> list[str]:
+    async def genres(self, library_id: str | None = None) -> list[str]:
         body = await self._get("getGenres")
         entries = (body.get("genres") or {}).get("genre") or []
         return [g.get("value") for g in entries if g.get("value")]
 
     async def genre_albums(self, genre: str, offset: int = 0,
-                           limit: int = 100) -> list[Album]:
+                           limit: int = 100,
+                           library_id: str | None = None) -> list[Album]:
         body = await self._get(
             "getAlbumList2", type="byGenre", genre=genre,
             size=min(limit, 500), offset=offset,
