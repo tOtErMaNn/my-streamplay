@@ -475,6 +475,34 @@ Item {
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
 
+        // Which library is being browsed: everything, a whole service, or
+        // one of its libraries. Its own row, kept clear of the search.
+        PlasmaComponents.ComboBox {
+            id: sourceBox
+            Layout.fillWidth: true
+            visible: client.libraries.length > 1 || libraryList.length > 0
+            textRole: "name"
+            model: pane.scopeEntries
+
+            onActivated: index => pane.setScope(model[index].source,
+                                                model[index].libraryId)
+
+            // Follow the filters, since entries shift as services come and go.
+            function syncToFilter() {
+                for (let i = 0; i < model.length; ++i) {
+                    if ((model[i].source || "") === pane.sourceFilter
+                        && (model[i].libraryId || "") === pane.libraryFilter) {
+                        currentIndex = i;
+                        return;
+                    }
+                }
+                currentIndex = 0;
+            }
+
+            onModelChanged: syncToFilter()
+            Component.onCompleted: syncToFilter()
+        }
+
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
@@ -538,32 +566,6 @@ Item {
                         pane.load();
                     }
                 }
-            }
-
-            PlasmaComponents.ComboBox {
-                id: sourceBox
-                Layout.maximumWidth: Kirigami.Units.gridUnit * 8
-                visible: client.libraries.length > 1 || libraryList.length > 0
-                textRole: "name"
-                model: pane.scopeEntries
-
-                onActivated: index => pane.setScope(model[index].source,
-                                                    model[index].libraryId)
-
-                // Follow the filters, since entries shift as services come and go.
-                function syncToFilter() {
-                    for (let i = 0; i < model.length; ++i) {
-                        if ((model[i].source || "") === pane.sourceFilter
-                            && (model[i].libraryId || "") === pane.libraryFilter) {
-                            currentIndex = i;
-                            return;
-                        }
-                    }
-                    currentIndex = 0;
-                }
-
-                onModelChanged: syncToFilter()
-                Component.onCompleted: syncToFilter()
             }
         }
 
