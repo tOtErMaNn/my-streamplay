@@ -74,6 +74,26 @@ install_applet() {
     fi
 }
 
+refresh_plasma() {
+    say "Clearing the Plasma cache"
+    # Plasma caches compiled QML; an upgraded applet keeps serving the
+    # previous code until that cache is gone.
+    rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}"/plasma* 2>/dev/null || true
+
+    if ! pgrep -x plasmashell >/dev/null; then
+        say "plasmashell is not running; the applet shows up with the next session."
+        return
+    fi
+    say "Restarting plasmashell"
+    if systemctl --user is-active --quiet plasma-plasmashell.service; then
+        systemctl --user restart plasma-plasmashell.service
+    else
+        kquitapp6 plasmashell >/dev/null 2>&1 || pkill -x plasmashell || true
+        sleep 1
+        nohup plasmashell --replace >/dev/null 2>&1 &
+    fi
+}
+
 uninstall() {
     say "Removing the systemd user service"
     systemctl --user disable --now streamplay.service 2>/dev/null || true
@@ -96,6 +116,7 @@ case "${1:-install}" in
         install_daemon
         install_service
         install_applet
+        refresh_plasma
         echo
         say "Done. Add the “Streamplay” widget to a panel or the desktop,"
         say "then use its settings to add your music servers."
