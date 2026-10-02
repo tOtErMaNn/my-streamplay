@@ -480,7 +480,8 @@ Item {
         PlasmaComponents.ComboBox {
             id: sourceBox
             Layout.fillWidth: true
-            visible: client.libraries.length > 1 || libraryList.length > 0
+            visible: client.libraries.length > 1
+                     || client.libraries.some(s => s.hasFolders)
             textRole: "name"
             model: pane.scopeEntries
 
